@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STAP-Kenya AI Routing Simulator</title>
+    <style>
+        :root {
+            --primary-green: #09b43a;
+            --dark-green: #006222;
+            --accent-blue: #5cacff;
+            --bg-dark: #0d1117;
+            --bg-card: #151b23;
+            --border-color: #3d444d;
+            --text-light: #f0f6fc;
+            --text-muted: #9198a1;
+            --status-safe: #2bd853;
+            --status-warn: #f0b72f;
+            --status-danger: #ff6a69;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 15px;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .sim-container {
+            background-color: var(--bg-card);
+            border-radius: 8px;
+            padding: 15px;
+            height: 390px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            background: rgba(255,255,255,0.02);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .control-group {
+            flex: 1;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .slider {
+            width: 100%;
+            accent-color: var(--primary-green);
+            cursor: pointer;
+        }
+
+        .visualization-space {
+            flex-grow: 1;
+            border: 1px dashed var(--border-color);
+            border-radius: 6px;
+            background: #11161d;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 180px;
+        }
+
+        .map-grid {
+            width: 90%;
+            height: 80%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        .node {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--bg-dark);
+            border: 2px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+
+        .node.active-dest {
+            border-color: var(--primary-green);
+            box-shadow: 0 0 10px rgba(9, 180, 58, 0.4);
+        }
+
+        .path-line {
+            position: absolute;
+            height: 4px;
+            background: var(--border-color);
+            width: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1;
+            transition: background 0.3s ease;
+        }
+
+        .path-line.optimized {
+            background: linear-gradient(90deg, var(--primary-green), var(--accent-blue));
+        }
+
+        .vehicle-dot {
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-blue);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translate(-50%, -50%);
+            z-index: 3;
+            animation: moveVehicle 3s infinite linear;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .pill-safe { background: rgba(43, 216, 83, 0.15); color: var(--status-safe); }
+        .pill-warn { background: rgba(240, 183, 47, 0.15); color: var(--status-warn); }
+        .pill-danger { background: rgba(255, 106, 105, 0.15); color: var(--status-danger); }
+
+        @keyframes moveVehicle {
+            0% { left: 10%; opacity: 1; }
+            80% { left: 90%; opacity: 1; }
+            100% { left: 90%; opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sim-container">
+        <!-- Live Settings Inputs -->
+        <div class="controls">
+            <div class="control-group">
+                <label>Maasai Mara Load: <span id="mara-val">45</span>%</label>
+                <input type="range" class="slider" id="mara-slider" min="10" max="100" value="45" oninput="updateSim()">
+            </div>
+            <div class="control-group">
+                <label>Amboseli Load: <span id="amboseli-val">25</span>%</label>
+                <input type="range" class="slider" id="amboseli-slider" min="10" max="100" value="25" oninput="updateSim()">
+            </div>
+        </div>
+
+        <!-- Real-time Animated Tracking Space -->
+        <div class="visualization-space">
+            <div class="map-grid">
+                <div class="path-line optimized" id="route-line"></div>
+                <div class="vehicle-dot" id="car"></div>
+                
+                <div class="node active-dest" id="start-node">GATE</div>
+                <div class="node" id="mid-node-1">PATH A</div>
+                <div class="node" id="mid-node-2">PATH B</div>
+                <div class="node active-dest" id="end-node">MARA</div>
+            </div>
+        </div>
+
+        <!-- Dashboard Outputs -->
+        <div class="status-bar">
+            <div>AI Routing Strategy: <strong id="strategy-text" style="color: var(--primary-green);">Direct Corridor</strong></div>
+            <div class="status-pill pill-safe" id="status-tag">Ecosystem Stable</div>
+        </div>
+    </div>
+
+    <script>
+        function updateSim() {
+            const maraLoad = document.getElementById('mara-slider').value;
+            const amboseliLoad = document.getElementById('amboseli-slider').value;
+            
+            document.getElementById('mara-val').innerText = maraLoad;
+            document.getElementById('amboseli-val').innerText = amboseliLoad;
+
+            const strategyText = document.getElementById('strategy-text');
+            const statusTag = document.getElementById('status-tag');
+            const routeLine = document.getElementById('route-line');
+            const pathA = document.getElementById('mid-node-1');
+            const pathB = document.getElementById('mid-node-2');
+
+            // Threshold rules logic matching ecological parameters
+            if (maraLoad > 80) {
+                strategyText.innerText = "Bypass Route Active (Via Path B)";
+                strategyText.style.color = "var(--accent-blue)";
+                statusTag.innerText = "Overcrowding Intervention";
+                statusTag.className = "status-pill pill-danger";
+                pathA.style.borderColor = "var(--status-danger)";
+                pathB.style.borderColor = "var(--primary-green)";
+            } else if (maraLoad > 60) {
+                strategyText.innerText = "Adaptive Speed Governor Imposed";
+                strategyText.style.color = "var(--status-warn)";
+                statusTag.innerText = "Approaching Threshold Cap";
+                statusTag.className = "status-pill pill-warn";
+                pathA.style.borderColor = "var(--status-warn)";
+                pathB.style.borderColor = "var(--border-color)";
+            } else {
+                strategyText.innerText = "Direct Corridor";
+                strategyText.style.color = "var(--primary-green)";
+                statusTag.innerText = "Ecosystem Stable";
+                statusTag.className = "status-pill pill-safe";
+                pathA.style.borderColor = "var(--border-color)";
+                pathB.style.borderColor = "var(--border-color)";
+            }
+        }
+    </script>
+</body>
+</html>
